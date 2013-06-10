@@ -8,11 +8,49 @@ public class Test{
   }
 
   private short calcChecksum(int src_addr, int dst_addr, ByteBuffer tcp_header){
-    short sum = 0;
+    int sum = 0;
+    int word;
 
-    Integer src = new Integer(src_addr>>8);
-    System.out.printf("Byte value of %d = 0x%02X  \n", src_addr,src.byteValue());
-    return 0;
+
+    //Create pseudo-header
+    ByteBuffer pseudo_header = ByteBuffer.allocate(12);
+    pseudo_header.putInt(0,src_addr);
+    pseudo_header.putInt(4, dst_addr);
+    pseudo_header.put(8, (byte)(0));
+    pseudo_header.put(9, (byte)(6));
+    pseudo_header.putShort(10, (short)((pseudo_header.capacity() + tcp_header.capacity())));
+    pseudo_header.rewind();
+
+
+    //Calculate sum for pseudo header
+    for(int i = 0;i<pseudo_header.capacity();i+=2){
+      word = (short) pseudo_header.getShort();
+      word &= 0xffff; // Convert into an unsigned short
+
+      sum += word;
+      //check and correct overflows
+      if( (sum & 0xffff0000) != 0 ){
+        sum &= 0xffff;
+        sum++;
+      }
+    }
+
+    //Calculate sum for real tcp header
+    tcp_header.rewind();
+    for(int i = 0;i<tcp_header.capacity();i+=2){
+      word = (short) tcp_header.getShort();
+      word &= 0xffff; // Convert into an unsigned short
+
+      sum += word;
+      //check and correct overflows
+      if( (sum & 0xffff0000) != 0 ){
+        sum &= 0xffff;
+        sum++;
+      }
+    }
+
+    //Return one's complement of the sum
+    return (short) ~(sum & 0xffff);
   }
 
   public void send_tcp_packet(int src_addr, int dst_addr, short src_port, short dst_port,int seq_no, int ack_no){
@@ -30,25 +68,20 @@ public class Test{
     tcp_header.putShort(16,calcChecksum(src_addr,dst_addr,tcp_header));
 
     byte[] tcp_header_buffer = new byte[8100];
+    tcp_header.rewind();
     tcp_header.get(tcp_header_buffer);
+    tcp_header.rewind();
     for(int i=0;i<32;i++){
-      System.out.printf("0x%02X ", tcp_header_buffer[i]);
+      System.out.printf("%02X ", tcp_header.get());
+      //System.out.printf("%02X ", tcp_header_buffer[i]);
       if((i+1)%4==0){
         System.out.println();
       }
     }
-    System.out.println();
-    for(int i=0;i<32;i++){
-      System.out.printf("%s ", Integer.toBinaryString(tcp_header_buffer[i]));
-      if((i+1)%4==0){
-        System.out.println();
-      }
-    }
-    System.out.printf("All ones: %s", Integer.toBinaryString(0xFF));
  }
 
   public static void main(String[] args){
-    new Test().send_tcp_packet(123456789,2,(short)(1050),(short)(1051),123456789,2);
+    new Test().send_tcp_packet(19216801,2,(short)(1050),(short)(1051),123456789,2);
   }
 }
 
